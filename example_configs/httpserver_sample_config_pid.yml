@@ -1,0 +1,6 @@
+---
+pid: 1234
+
+rules:
+- pattern: ".*"
+

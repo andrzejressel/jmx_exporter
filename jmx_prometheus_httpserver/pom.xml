@@ -34,6 +34,11 @@
             <artifactId>jmx_prometheus_common</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.github.olivergondza</groupId>
+            <artifactId>maven-jdk-tools-wrapper</artifactId>
+            <version>0.1</version>
+        </dependency>
     </dependencies>
 
     <build>

@@ -97,7 +97,7 @@ public class BaseTest {
 
                     break;
                 }
-            case Standalone:
+            case StandaloneRemote:
                 {
                     GenericContainer<?> applicationContainer =
                             createStandaloneApplicationContainer(
@@ -106,11 +106,25 @@ public class BaseTest {
                     testState.applicationContainer(applicationContainer);
 
                     GenericContainer<?> exporterContainer =
-                            createStandaloneExporterContainer(network, dockerImageName, testName);
+                            createStandaloneRemoteExporterContainer(
+                                    network, dockerImageName, testName);
                     exporterContainer.start();
                     testState.exporterContainer(exporterContainer);
 
                     HttpClient httpClient = createHttpClient(exporterContainer, baseUrl);
+                    testState.httpClient(httpClient);
+
+                    break;
+                }
+            case StandaloneLocal:
+                {
+                    GenericContainer<?> applicationContainer =
+                            createStandaloneLocalApplicationContainer(
+                                    network, dockerImageName, testName);
+                    applicationContainer.start();
+                    testState.applicationContainer(applicationContainer);
+
+                    HttpClient httpClient = createHttpClient(applicationContainer, baseUrl);
                     testState.httpClient(httpClient);
 
                     break;
@@ -156,7 +170,7 @@ public class BaseTest {
                                                 new Ulimit[] {
                                                     new Ulimit("nofile", 65536L, 65536L)
                                                 }))
-                .withCommand("/bin/sh application.sh")
+                .withCommand("/bin/bash application.sh")
                 .withExposedPorts(9999)
                 .withLogConsumer(
                         outputFrame -> {
@@ -180,7 +194,7 @@ public class BaseTest {
      * @param testName testName
      * @return the return value
      */
-    private static GenericContainer<?> createStandaloneExporterContainer(
+    private static GenericContainer<?> createStandaloneRemoteExporterContainer(
             Network network, String dockerImageName, String testName) {
         return new GenericContainer<>(dockerImageName)
                 .waitingFor(Wait.forListeningPort())
@@ -199,7 +213,7 @@ public class BaseTest {
                                                 new Ulimit[] {
                                                     new Ulimit("nofile", 65536L, 65536L)
                                                 }))
-                .withCommand("/bin/sh exporter.sh")
+                .withCommand("/bin/bash exporter.sh")
                 .withExposedPorts(8888)
                 .withLogConsumer(
                         outputFrame -> {
@@ -216,7 +230,52 @@ public class BaseTest {
     }
 
     /**
-     * Method to create an application container
+     * Method to create an application container with exporter locally connected
+     *
+     * @param network network
+     * @param dockerImageName dockerImageName
+     * @param testName testName
+     * @return the return value
+     */
+    private static GenericContainer<?> createStandaloneLocalApplicationContainer(
+            Network network, String dockerImageName, String testName) {
+        return new GenericContainer<>(dockerImageName)
+                .waitingFor(Wait.forListeningPort())
+                .withClasspathResourceMapping("common", "/temp", BindMode.READ_ONLY)
+                .withClasspathResourceMapping(
+                        testName.replace(".", "/") + "/StandaloneLocal",
+                        "/temp",
+                        BindMode.READ_ONLY)
+                .withCreateContainerCmdModifier(
+                        c ->
+                                c.getHostConfig()
+                                        .withMemory(MEMORY_BYTES)
+                                        .withMemorySwap(MEMORY_SWAP_BYTES))
+                .withCreateContainerCmdModifier(
+                        c ->
+                                c.getHostConfig()
+                                        .withUlimits(
+                                                new Ulimit[] {
+                                                    new Ulimit("nofile", 65536L, 65536L)
+                                                }))
+                .withCommand("/bin/bash application.sh")
+                .withExposedPorts(8888)
+                .withLogConsumer(
+                        outputFrame -> {
+                            String string = outputFrame.getUtf8StringWithoutLineEnding().trim();
+                            if (!string.isBlank()) {
+                                System.out.println(string);
+                            }
+                        })
+                .withNetwork(network)
+                .withNetworkAliases("application")
+                .withStartupCheckStrategy(new IsRunningStartupCheckStrategy())
+                .withStartupTimeout(Duration.ofMillis(30000))
+                .withWorkingDirectory("/temp");
+    }
+
+    /**
+     * Method to create an application container with java agent
      *
      * @param network network
      * @param dockerImageName dockerImageName
@@ -242,7 +301,7 @@ public class BaseTest {
                                                 new Ulimit[] {
                                                     new Ulimit("nofile", 65536L, 65536L)
                                                 }))
-                .withCommand("/bin/sh application.sh")
+                .withCommand("/bin/bash application.sh")
                 .withExposedPorts(8888)
                 .withLogConsumer(
                         outputFrame -> {

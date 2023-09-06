@@ -20,6 +20,7 @@ import static java.lang.String.format;
 import static java.util.logging.Level.FINE;
 import static java.util.logging.Level.SEVERE;
 
+import com.sun.tools.attach.VirtualMachine;
 import io.prometheus.client.Collector;
 import io.prometheus.client.Counter;
 import io.prometheus.jmx.logger.Logger;
@@ -137,12 +138,12 @@ public class JmxCollector extends Collector implements Collector.Describable {
                         + " remote JVM.");
             System.exit(-1);
         }
-        if (mode == Mode.STANDALONE && config.jmxUrl.isEmpty()) {
+        if (mode == Mode.STANDALONE && (config.jmxUrl.isEmpty())) {
             LOGGER.log(
                     SEVERE,
                     "Configuration error: When running jmx_exporter in standalone mode (using"
                             + " jmx_prometheus_httpserver-*.jar) you must configure 'jmxUrl' or"
-                            + " 'hostPort'.");
+                            + " 'hostPort' or 'pid'.");
             System.exit(-1);
         }
     }
@@ -196,13 +197,27 @@ public class JmxCollector extends Collector implements Collector.Describable {
                         "Invalid number provided for startDelaySeconds", e);
             }
         }
+        if (yamlConfig.containsKey("pid")) {
+            if (yamlConfig.containsKey("hostPort") || yamlConfig.containsKey("jmxUrl")) {
+                throw new IllegalArgumentException(
+                        "At most one of hostPort, jmxUrl and pid must be provided");
+            }
+            var pid = (Integer) yamlConfig.get("pid");
+            try {
+                cfg.jmxUrl =
+                        VirtualMachine.attach(Integer.toString(pid)).startLocalManagementAgent();
+            } catch (Exception e) {
+                throw new IllegalArgumentException("Cannot attach to VM with pid '" + pid + "'", e);
+            }
+        }
         if (yamlConfig.containsKey("hostPort")) {
             if (yamlConfig.containsKey("jmxUrl")) {
                 throw new IllegalArgumentException(
-                        "At most one of hostPort and jmxUrl must be provided");
+                        "At most one of hostPort, jmxUrl and pid must be provided");
             }
             cfg.jmxUrl = "service:jmx:rmi:///jndi/rmi://" + yamlConfig.get("hostPort") + "/jmxrmi";
-        } else if (yamlConfig.containsKey("jmxUrl")) {
+        }
+        if (yamlConfig.containsKey("jmxUrl")) {
             cfg.jmxUrl = (String) yamlConfig.get("jmxUrl");
         }
 
